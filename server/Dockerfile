@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-apiVersion: v1
-kind: Secret
-metadata:
-  name: vpn-keys
-  namespace: kube-system
-type: Opaque
-data:
-  ca-crt.pem: << base64 >>
-  client-key.pem: << base64 >>
-  client-cert.pem: << base64 >>
-  vpn.tlsauth: << base64 >>
+FROM alpine:3.10.3
+
+RUN apk add --update bash curl openvpn bc && \
+    rm -rf /var/cache/apk/*
+
+ADD server/network-connection.sh server/openvpn.config.template /
+
+RUN mkdir /client-config-dir
+ADD server/vpn-shoot.template /client-config-dir
+
+EXPOSE 1194
+
+# We use "exec" and "trap 'exit' TERM" in the bash script, otherwise,
+# the script won't recieve and react to SIGTERM
+CMD exec /network-connection.sh

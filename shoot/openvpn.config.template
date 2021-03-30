@@ -12,32 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-mode server
-tls-server
-proto tcp4-server
-dev tun0
+# use TCP instead of UDP (commonly not supported by load balancers)
+proto tcp-client
+
+# don't cache authorization information in memory
+auth-nocache
+
+# stop process if something goes wrong
+remap-usr1 SIGTERM
+
+# Use a dynamic tun device.
+dev tun
 
 # Additonal optimizations
 txqueuelen 1000
 
+# get all routing information from server
+pull
+
 cipher AES-256-CBC
 
-# port can always be 1194 here as it is not visible externally. A different
-# port can be configured for the external load balancer in the service
-# manifest
-port 1194
-
-keepalive 10 60
-server 192.168.123.0 255.255.255.0
-
-push "route ${SERVICE_NETWORK_ADDRESS} ${SERVICE_NETWORK_NETMASK}"
-push "route ${POD_NETWORK_ADDRESS} ${POD_NETWORK_NETMASK}"
-
-duplicate-cn
-
+tls-client
 key "/srv/secrets/vpn-shoot/tls.key"
 cert "/srv/secrets/vpn-shoot/tls.crt"
 ca "/srv/secrets/vpn-shoot/ca.crt"
-dh "/srv/secrets/dh/dh2048.pem"
 
-tls-auth "/srv/secrets/tlsauth/vpn.tlsauth" 0
+tls-auth "/srv/secrets/tlsauth/vpn.tlsauth" 1
+cipher AES-256-CBC
+
+# https://openvpn.net/index.php/open-source/documentation/howto.html#mitm
+remote-cert-tls server
+
+# pull filter
+pull-filter ignore "route ${SERVICE_NETWORK_ADDRESS} ${SERVICE_NETWORK_NETMASK}"
+pull-filter ignore "route ${POD_NETWORK_ADDRESS} ${POD_NETWORK_NETMASK}"

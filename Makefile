@@ -12,15 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-VERSION                := $(shell cat VERSION)
-REGISTRY               := eu.gcr.io/gardener-project/gardener
-PREFIX                 := vpn
-SEED_IMAGE_REPOSITORY  := $(REGISTRY)/$(PREFIX)-seed
-SEED_IMAGE_TAG         := $(VERSION)
-SHOOT_IMAGE_REPOSITORY := $(REGISTRY)/$(PREFIX)-shoot
-SHOOT_IMAGE_TAG        := $(VERSION)
+VERSION                 := $(shell cat VERSION)
+REGISTRY                := eu.gcr.io/gardener-project/gardener
+PREFIX                  := vpn
+SEED_IMAGE_REPOSITORY   := $(REGISTRY)/$(PREFIX)-seed
+SEED_IMAGE_TAG          := $(VERSION)
+SERVER_IMAGE_REPOSITORY := $(REGISTRY)/$(PREFIX)-server
+SERVER_IMAGE_TAG        := $(VERSION)
+SHOOT_IMAGE_REPOSITORY  := $(REGISTRY)/$(PREFIX)-shoot
+SHOOT_IMAGE_TAG         := $(VERSION)
 
-PATH                   := $(GOBIN):$(PATH)
+PATH                    := $(GOBIN):$(PATH)
 
 export PATH
 
@@ -28,13 +30,16 @@ export PATH
 seed-docker-image:
 	@docker build -t $(SEED_IMAGE_REPOSITORY):$(SEED_IMAGE_TAG) -f seed/Dockerfile --rm .
 
+.PHONY: server-docker-image
+server-docker-image:
+	@docker build -t $(SERVER_IMAGE_REPOSITORY):$(SERVER_IMAGE_TAG) -f server/Dockerfile --rm .
+
 .PHONY: shoot-docker-image
 shoot-docker-image:
 	@docker build -t $(SHOOT_IMAGE_REPOSITORY):$(SHOOT_IMAGE_TAG) -f shoot/Dockerfile --rm .
 
-
 .PHONY: docker-images
-docker-images: seed-docker-image shoot-docker-image
+docker-images: seed-docker-image server-docker-image shoot-docker-image
 
 .PHONY: release
 release: docker-images docker-login docker-push
@@ -46,6 +51,8 @@ docker-login:
 .PHONY: docker-push
 docker-push:
 	@if ! docker images $(SEED_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SEED_IMAGE_TAG); then echo "$(SEED_IMAGE_REPOSITORY) version $(SEED_IMAGE_TAG) is not yet built. Please run 'make seed-docker-image'"; false; fi
+	@if ! docker images $(SERVER_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SERVER_IMAGE_TAG); then echo "$(SERVER_IMAGE_REPOSITORY) version $(SERVER_IMAGE_TAG) is not yet built. Please run 'make server-docker-image'"; false; fi
 	@if ! docker images $(SHOOT_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SHOOT_IMAGE_TAG); then echo "$(SHOOT_IMAGE_REPOSITORY) version $(SHOOT_IMAGE_TAG) is not yet built. Please run 'make shoot-docker-image'"; false; fi
 	@gcloud docker -- push $(SEED_IMAGE_REPOSITORY):$(SEED_IMAGE_TAG)
+	@gcloud docker -- push $(SERVER_IMAGE_REPOSITORY):$(SERVER_IMAGE_TAG)
 	@gcloud docker -- push $(SHOOT_IMAGE_REPOSITORY):$(SHOOT_IMAGE_TAG)

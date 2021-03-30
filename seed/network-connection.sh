@@ -20,7 +20,6 @@ function log() {
 
 trap 'exit' TERM SIGINT
 
-service_name="${SERVICE_NAME:-vpn-shoot}"
 openvpn_port="${OPENVPN_PORT:-1194}"
 
 tcp_keepalive_time="${TCP_KEEPALIVE_TIME:-7200}"
@@ -28,61 +27,7 @@ tcp_keepalive_intvl="${TCP_KEEPALIVE_INTVL:-75}"
 tcp_keepalive_probes="${TCP_KEEPALIVE_PROBES:-9}"
 tcp_retries2="${TCP_RETRIES2:-5}"
 
-APISERVER_AUTH_MODE="${APISERVER_AUTH_MODE:-basic-auth}"
-APISERVER_AUTH_MODE_BASIC_AUTH_CSV="${APISERVER_AUTH_MODE_BASIC_AUTH_CSV:-/srv/auth/basic_auth.csv}"
-APISERVER_AUTH_MODE_BASIC_AUTH_USERNAME="${APISERVER_AUTH_MODE_BASIC_AUTH_USERNAME:-admin}"
-APISERVER_AUTH_MODE_CLIENT_CERT_CA="${APISERVER_AUTH_MODE_CLIENT_CERT_CA:-/srv/secrets/vpn-seed/ca.crt}"
-APISERVER_AUTH_MODE_CLIENT_CERT_CRT="${APISERVER_AUTH_MODE_CLIENT_CERT_CRT:-/srv/secrets/vpn-seed/tls.crt}"
-APISERVER_AUTH_MODE_CLIENT_CERT_KEY="${APISERVER_AUTH_MODE_CLIENT_CERT_KEY:-/srv/secrets/vpn-seed/tls.key}"
-
-function get_host() {
-  if [[ -z "$MAIN_VPN_SEED" ]]; then
-    echo "kube-apiserver"
-  else
-    echo "127.0.0.1"
-  fi
-}
-
-function identify_endpoint() {
-  log "trying to identify the endpoint (load balancer name of $service_name service) myself..."
-
-  curl_auth_flags=""
-  if [[ "$APISERVER_AUTH_MODE" == "basic-auth" ]]; then
-    curl_auth_flags="--insecure --user ${APISERVER_AUTH_MODE_BASIC_AUTH_USERNAME}:$(cat ${APISERVER_AUTH_MODE_BASIC_AUTH_CSV} | sed -E 's/^([^,]*),.*$/\1/')"
-  elif [[ "$APISERVER_AUTH_MODE" == "client-cert" ]]; then
-    curl_auth_flags="--cacert $APISERVER_AUTH_MODE_CLIENT_CERT_CA --cert $APISERVER_AUTH_MODE_CLIENT_CERT_CRT --key $APISERVER_AUTH_MODE_CLIENT_CERT_KEY"
-  fi
-
-  set +e
-  SERVICE_STATUS="$(curl \
-                      --connect-timeout 5 \
-                      --max-time 5 \
-                      --silent \
-                      $curl_auth_flags \
-                      --header "Accept: application/json" \
-                      --request GET \
-                      "https://$(get_host)/api/v1/namespaces/kube-system/services/$service_name")"
-  ENDPOINTS="$(echo "$SERVICE_STATUS" | jq -r 'if (.status | type) == "object" and (.status.loadBalancer | type) == "object" and (.status.loadBalancer.ingress | type) == "array" and (.status.loadBalancer.ingress | length) > 0 then .status.loadBalancer.ingress | map(if(. | has("ip")) then .ip else .hostname end) | .[] else empty end')"
-  set -e
-
-ENDPOINT=""
-  if [[ -z "$ENDPOINTS" || "$ENDPOINTS" == "null" ]]; then
-    log "error: could not identify any endpoints"
-    return
-  fi
-
-  log "found endpoints: [ $(echo $ENDPOINTS | tr "\n" " ")]"
-  for endpoint in $ENDPOINTS; do
-    log "checking whether port ${openvpn_port} is open on $endpoint ..."
-    if ! nc -z -v -w 3 "$endpoint" "${openvpn_port}" &> /dev/null; then
-      log "error: port ${openvpn_port} on $endpoint is not open, can not use it"
-    else
-      log "port ${openvpn_port} on $endpoint is open, using it"
-      ENDPOINT="$endpoint"
-      return
-    fi
-  done
-}
+ENDPOINT="${ENDPOINT:-vpn-server}"
 
 function set_value() {
   if [ -f $1 ] ; then
@@ -172,14 +117,10 @@ echo "pull-filter ignore route-ipv6" >> openvpn.config
 echo "pull-filter ignore redirect-gateway-ipv6" >> openvpn.config
 
 while : ; do
-    # identify_endpoint may get an invalid endpoint, need
-    # to make sure openvpn is able to pick up the correct
-    # one once it has been registered
-    identify_endpoint
     if [[ ! -z $ENDPOINT ]]; then
         openvpn --remote ${ENDPOINT} --port ${openvpn_port} --config openvpn.config
     else
         log "No tunnel endpoint found"
     fi
-    sleep 5
+    sleep 1
 done
