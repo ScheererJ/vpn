@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-apiVersion: v1
-kind: Secret
-metadata:
-  name: vpn-keys
-  namespace: kube-system
-type: Opaque
-data:
-  ca-crt.pem: << base64 >>
-  server-key.pem: << base64 >>
-  server-cert.pem: << base64 >>
-  vpn.tlsauth: << base64 >>
-  dh2048.pem: << base64 >>
+FROM alpine:3.10.3
+
+RUN apk add --update bash curl openvpn bc jq && \
+    rm -rf /var/cache/apk/*
+
+ADD seed-client/network-connection.sh seed-client/openvpn.config.template /
+
+# We use "exec" and "trap 'exit' TERM" in the bash script, otherwise,
+# the script won't recieve and react to SIGTERM
+CMD exec /network-connection.sh

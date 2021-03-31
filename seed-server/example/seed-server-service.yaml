@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
 apiVersion: v1
-kind: Secret
+kind: Service
 metadata:
-  name: vpn-keys
-  namespace: kube-system
-type: Opaque
-data:
-  ca-crt.pem: << base64 >>
-  client-key.pem: << base64 >>
-  client-cert.pem: << base64 >>
-  vpn.tlsauth: << base64 >>
+  name: vpn-seed-service
+  namespace: shoot-<shoot name an project>
+spec:
+  selector:
+    app: vpn-seed-server
+  type: LoadBalancer
+  ports:
+  - name: openvpn
+    protocol: TCP
+    port: 1194
+    targetPort: 1194

@@ -20,6 +20,32 @@ function log() {
 
 trap 'exit' TERM SIGINT
 
+openvpn_port="${OPENVPN_PORT:-1194}"
+
+tcp_keepalive_time="${TCP_KEEPALIVE_TIME:-7200}"
+tcp_keepalive_intvl="${TCP_KEEPALIVE_INTVL:-75}"
+tcp_keepalive_probes="${TCP_KEEPALIVE_PROBES:-9}"
+tcp_retries2="${TCP_RETRIES2:-5}"
+
+ENDPOINT="${ENDPOINT:-vpn-seed-server}"
+
+function set_value() {
+  if [ -f $1 ] ; then
+    log "Setting $2 on $1"
+    echo "$2" > $1
+  fi
+}
+
+function configure_tcp() {
+  set_value /proc/sys/net/ipv4/tcp_keepalive_time $tcp_keepalive_time
+  set_value /proc/sys/net/ipv4/tcp_keepalive_intvl $tcp_keepalive_intvl
+  set_value /proc/sys/net/ipv4/tcp_keepalive_probes $tcp_keepalive_probes
+
+  set_value /proc/sys/net/ipv4/tcp_retries2 $tcp_retries2
+}
+
+configure_tcp
+
 # for each cidr config, it looks first at its env var, then a local file (which may be a volume mount), then the default
 baseConfigDir="/init-config"
 fileServiceNetwork=
@@ -37,7 +63,6 @@ node_network="${NODE_NETWORK:-${fileNodeNetwork}}"
 node_network="${node_network:-}"
 
 # calculate netmask for given CIDR (required by openvpn)
-#
 CIDR2Netmask() {
     local cidr="$1"
 
@@ -76,20 +101,26 @@ sed -e "s/\${SERVICE_NETWORK_ADDRESS}/${service_network_address}/" \
     -e "s/\${POD_NETWORK_NETMASK}/${pod_network_netmask}/" \
     openvpn.config.template > openvpn.config
 
-sed -e "s/\${SERVICE_NETWORK_ADDRESS}/${service_network_address}/" \
-    -e "s/\${SERVICE_NETWORK_NETMASK}/${service_network_netmask}/" \
-    -e "s/\${POD_NETWORK_ADDRESS}/${pod_network_address}/" \
-    -e "s/\${POD_NETWORK_NETMASK}/${pod_network_netmask}/" \
-    /client-config-dir/vpn-shoot.template > /client-config-dir/vpn-shoot
-
 if [[ ! -z "$node_network" ]]; then
-    for n in $(echo $node_network |  sed 's/[][]//g' | sed 's/,/ /g')
-    do
-        node_network_address=$(echo $n | cut -f1 -d/)
-        node_network_netmask=$(CIDR2Netmask $n)
-        echo "push \"route ${node_network_address} ${node_network_netmask}\"" >> openvpn.config
-        echo "iroute ${node_network_address} ${node_network_netmask}" >> /client-config-dir/vpn-shoot
-    done
+  for n in $(echo $node_network |  sed 's/[][]//g' | sed 's/,/ /g')
+  do
+      node_network_address=$(echo $n | cut -f1 -d/)
+      node_network_netmask=$(CIDR2Netmask $n)
+      echo "pull-filter accept \"route ${node_network_address} ${node_network_netmask}\"" >> openvpn.config
+  done
 fi
 
-openvpn --config openvpn.config
+echo "pull-filter accept \"route 192.168.123.\"" >> openvpn.config
+echo "pull-filter ignore \"route\"" >> openvpn.config
+echo "pull-filter ignore redirect-gateway" >> openvpn.config
+echo "pull-filter ignore route-ipv6" >> openvpn.config
+echo "pull-filter ignore redirect-gateway-ipv6" >> openvpn.config
+
+while : ; do
+    if [[ ! -z $ENDPOINT ]]; then
+        openvpn --remote ${ENDPOINT} --port ${openvpn_port} --config openvpn.config
+    else
+        log "No tunnel endpoint found"
+    fi
+    sleep 1
+done

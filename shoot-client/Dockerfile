@@ -14,10 +14,12 @@
 
 FROM alpine:3.10.3
 
-RUN apk add --update bash curl openvpn bc jq && \
+RUN apk add --update bash curl openvpn iptables bc && \
     rm -rf /var/cache/apk/*
 
-ADD seed/network-connection.sh seed/openvpn.config.template /
+ADD shoot-client/network-connection.sh shoot-client/openvpn.config.template /
+
+EXPOSE 1194
 
 # We use "exec" and "trap 'exit' TERM" in the bash script, otherwise,
 # the script won't recieve and react to SIGTERM

@@ -12,34 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-VERSION                 := $(shell cat VERSION)
-REGISTRY                := eu.gcr.io/gardener-project/gardener
-PREFIX                  := vpn
-SEED_IMAGE_REPOSITORY   := $(REGISTRY)/$(PREFIX)-seed
-SEED_IMAGE_TAG          := $(VERSION)
-SERVER_IMAGE_REPOSITORY := $(REGISTRY)/$(PREFIX)-server
-SERVER_IMAGE_TAG        := $(VERSION)
-SHOOT_IMAGE_REPOSITORY  := $(REGISTRY)/$(PREFIX)-shoot
-SHOOT_IMAGE_TAG         := $(VERSION)
+VERSION                       := $(shell cat VERSION)
+REGISTRY                      := eu.gcr.io/gardener-project/gardener
+PREFIX                        := vpn
+SEED_CLIENT_IMAGE_REPOSITORY  := $(REGISTRY)/$(PREFIX)-seed-client
+SEED_CLIENT_IMAGE_TAG         := $(VERSION)
+SEED_SERVER_IMAGE_REPOSITORY  := $(REGISTRY)/$(PREFIX)-seed-server
+SEED_SERVER_IMAGE_TAG         := $(VERSION)
+SHOOT_CLIENT_IMAGE_REPOSITORY := $(REGISTRY)/$(PREFIX)-shoot-client
+SHOOT_CLIENT_IMAGE_TAG        := $(VERSION)
 
-PATH                    := $(GOBIN):$(PATH)
+PATH                          := $(GOBIN):$(PATH)
 
 export PATH
 
-.PHONY: seed-docker-image
-seed-docker-image:
-	@docker build -t $(SEED_IMAGE_REPOSITORY):$(SEED_IMAGE_TAG) -f seed/Dockerfile --rm .
+.PHONY: seed-client-docker-image
+seed-client-docker-image:
+	@docker build -t $(SEED_CLIENT_IMAGE_REPOSITORY):$(SEED_CLIENT_IMAGE_TAG) -f seed-client/Dockerfile --rm .
 
-.PHONY: server-docker-image
-server-docker-image:
-	@docker build -t $(SERVER_IMAGE_REPOSITORY):$(SERVER_IMAGE_TAG) -f server/Dockerfile --rm .
+.PHONY: seed-server-docker-image
+seed-server-docker-image:
+	@docker build -t $(SEED_SERVER_IMAGE_REPOSITORY):$(SEED_SERVER_IMAGE_TAG) -f seed-server/Dockerfile --rm .
 
-.PHONY: shoot-docker-image
-shoot-docker-image:
-	@docker build -t $(SHOOT_IMAGE_REPOSITORY):$(SHOOT_IMAGE_TAG) -f shoot/Dockerfile --rm .
+.PHONY: shoot-client-docker-image
+shoot-client-docker-image:
+	@docker build -t $(SHOOT_CLIENT_IMAGE_REPOSITORY):$(SHOOT_CLIENT_IMAGE_TAG) -f shoot-client/Dockerfile --rm .
 
 .PHONY: docker-images
-docker-images: seed-docker-image server-docker-image shoot-docker-image
+docker-images: seed-client-docker-image seed-server-docker-image shoot-client-docker-image
 
 .PHONY: release
 release: docker-images docker-login docker-push
@@ -50,9 +50,9 @@ docker-login:
 
 .PHONY: docker-push
 docker-push:
-	@if ! docker images $(SEED_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SEED_IMAGE_TAG); then echo "$(SEED_IMAGE_REPOSITORY) version $(SEED_IMAGE_TAG) is not yet built. Please run 'make seed-docker-image'"; false; fi
-	@if ! docker images $(SERVER_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SERVER_IMAGE_TAG); then echo "$(SERVER_IMAGE_REPOSITORY) version $(SERVER_IMAGE_TAG) is not yet built. Please run 'make server-docker-image'"; false; fi
-	@if ! docker images $(SHOOT_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SHOOT_IMAGE_TAG); then echo "$(SHOOT_IMAGE_REPOSITORY) version $(SHOOT_IMAGE_TAG) is not yet built. Please run 'make shoot-docker-image'"; false; fi
-	@gcloud docker -- push $(SEED_IMAGE_REPOSITORY):$(SEED_IMAGE_TAG)
-	@gcloud docker -- push $(SERVER_IMAGE_REPOSITORY):$(SERVER_IMAGE_TAG)
-	@gcloud docker -- push $(SHOOT_IMAGE_REPOSITORY):$(SHOOT_IMAGE_TAG)
+	@if ! docker images $(SEED_CLIENT_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SEED_CLIENT_IMAGE_TAG); then echo "$(SEED_CLIENT_IMAGE_REPOSITORY) version $(SEED_CLIENT_IMAGE_TAG) is not yet built. Please run 'make seed-client-docker-image'"; false; fi
+	@if ! docker images $(SEED_SERVER_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SEED_SERVER_IMAGE_TAG); then echo "$(SEED_SERVER_IMAGE_REPOSITORY) version $(SEED_SERVER_IMAGE_TAG) is not yet built. Please run 'make seed-server-docker-image'"; false; fi
+	@if ! docker images $(SHOOT_CLIENT_IMAGE_REPOSITORY) | awk '{ print $$2 }' | grep -q -F $(SHOOT_CLIENT_IMAGE_TAG); then echo "$(SHOOT_CLIENT_IMAGE_REPOSITORY) version $(SHOOT_CLIENT_IMAGE_TAG) is not yet built. Please run 'make shoot-client-docker-image'"; false; fi
+	@gcloud docker -- push $(SEED_CLIENT_IMAGE_REPOSITORY):$(SEED_CLIENT_IMAGE_TAG)
+	@gcloud docker -- push $(SEED_SERVER_IMAGE_REPOSITORY):$(SEED_SERVER_IMAGE_TAG)
+	@gcloud docker -- push $(SHOOT_CLIENT_IMAGE_REPOSITORY):$(SHOOT_CLIENT_IMAGE_TAG)
